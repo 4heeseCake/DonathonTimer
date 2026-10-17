@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import threading
+import logging
+import traceback
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import uvicorn
@@ -8,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from .config import OVERLAY_BUILD
+from .config import OVERLAY_BUILD, DATA_DIR
 from .donationalerts import DonationAlertsService
 from .state import AppState
 from .entertainment import EntertainmentService
@@ -27,7 +30,29 @@ class OverlayServer:
         self.port = port
         self.app = FastAPI(title="Donathon Timer Local Server", docs_url=None, redoc_url=None)
         self._thread: threading.Thread | None = None
+        self._server: uvicorn.Server | None = None
+        self._last_error: str = ""
+        self._log_path = DATA_DIR / "local_server.log"
+        self._logger = logging.getLogger("donathon.local_server")
+        if not self._logger.handlers:
+            self._logger.setLevel(logging.INFO)
+            self._logger.propagate = False
+            handler = RotatingFileHandler(self._log_path, maxBytes=350_000, backupCount=2, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+            self._logger.addHandler(handler)
         self._configure_routes()
+
+    @property
+    def log_path(self) -> Path:
+        return self._log_path
+
+    @property
+    def startup_error(self) -> str:
+        return self._last_error
+
+    def is_ready(self) -> bool:
+        server = self._server
+        return bool(self._thread and self._thread.is_alive() and server and server.started)
 
     def _configure_routes(self) -> None:
         templates = Path(__file__).parent / "templates"
@@ -103,15 +128,31 @@ h2{margin-top:0}.muted{color:#929cad}.ok{color:#64d98b}.bad{color:#ff9caa}
         if self._thread and self._thread.is_alive():
             return
 
+        self._last_error = ""
+        self._logger.info("Launching local server at http://%s:%s", self.host, self.port)
+
         def runner():
-            config = uvicorn.Config(
-                self.app,
-                host=self.host,
-                port=self.port,
-                log_level="warning",
-                access_log=False,
-            )
-            uvicorn.Server(config).run()
+            try:
+                config = uvicorn.Config(
+                    self.app,
+                    host=self.host,
+                    port=self.port,
+                    log_level="warning",
+                    access_log=False,
+                    # CRITICAL: PyInstaller --windowed makes sys.stderr/stdout
+                    # None. Default Uvicorn logging may fail at startup before
+                    # the server can bind, leaving OAuth/OBS unreachable.
+                    log_config=None,
+                )
+                self._server = uvicorn.Server(config)
+                self._server.run()
+                if not self._server.started:
+                    raise RuntimeError(f"Local server stopped before startup (port {self.port}; perhaps it is already in use)")
+            except BaseException as exc:
+                self._last_error = f"{type(exc).__name__}: {exc}"
+                self._logger.exception("Failed to run local server")
+            finally:
+                self._logger.info("Local server thread stopped")
 
         self._thread = threading.Thread(target=runner, name="overlay-server", daemon=True)
         self._thread.start()

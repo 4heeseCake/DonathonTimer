@@ -1,0 +1,28 @@
+Donathon Timer 0.9.4 Beta 2 — исправление авторизации DonationAlerts
+
+Почему исправлено:
+- локальный Uvicorn теперь запускается с log_config=None; это устраняет риск сбоя логирования в PyInstaller --windowed.
+- при незапущенном сервере окно DonationAlerts выводит понятную ошибку вместо открытия пустой страницы 127.0.0.1.
+- журнал запуска сервера: %LOCALAPPDATA%\DonathonTimer\local_server.log
+
+Как выпустить beta2 в своём публичном GitHub:
+1. Закрой установленную программу на ПК.
+2. Распакуй этот архив отдельно (не в репозитории).
+3. В локальной папке DonathonTimer-GitHub замени содержимое одноимённых файлов/папок из архива,
+   НО не удаляй .git, и не заменяй свой .gitignore — новые строки в нём остаются как прежде.
+4. GitHub Desktop: Changes -> Summary: Fix local OAuth server on Windows -> Commit to main -> Push origin.
+5. GitHub -> Actions -> Build and publish Windows beta -> Run workflow -> branch main,
+   tag v0.9.4-beta2 -> Run workflow.
+6. На странице Releases появится DonathonTimer-0.9.4-beta2-Setup.exe.
+7. Установи beta2 поверх beta1. Папка данных %LOCALAPPDATA%\DonathonTimer сохранится.
+8. После запуска, прежде чем авторизоваться, проверь http://127.0.0.1:17321/health
+   Ожидаемый ответ: {"ok":true,"overlay_build":"0.9.4-beta2"}
+9. В DonationAlerts Redirect URI должен быть http://127.0.0.1:17321/oauth/callback
+
+Если даже beta2 не открывает health:
+- Не нужно создавать заново приложение на DonationAlerts.
+- Открой %LOCALAPPDATA%\DonathonTimer\local_server.log и пришли последние строки
+  (проверь, что в них нет токенов или других секретов перед отправкой).
+- Выполни в PowerShell: Get-NetTCPConnection -LocalPort 17321 -ErrorAction SilentlyContinue
+
+Тесты исходников не заменяют реальную проверку Windows exe и OBS.

@@ -1,0 +1,56 @@
+name: Build and publish Windows beta
+
+on:
+  push:
+    tags:
+      - 'v0.9.4-beta*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.9.4-beta2)'
+        required: true
+        default: 'v0.9.4-beta2'
+
+permissions:
+  contents: write
+
+jobs:
+  windows-beta:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          if (-not (Test-Path '${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe')) {
+            choco install innosetup -y --no-progress
+          }
+      - name: Build programs, optional speech engine and installer
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          .\buildtools\build-windows.ps1 -Repo $env:RELEASE_REPO -Tag $env:RELEASE_TAG -Python 'python'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = Get-ChildItem release -Filter '*Setup.exe'
+          if (-not $setup) { throw 'Setup.exe was not built' }
+      - name: Create/update GitHub prerelease with downloads
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          $assets = @(Get-ChildItem release -File | Where-Object { $_.Extension -in '.exe','.zip','.txt' } | ForEach-Object { $_.FullName })
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG @assets --clobber
+          } else {
+            gh release create $env:RELEASE_TAG @assets --title "Donathon Timer $env:RELEASE_TAG" --prerelease --notes-file BETA_RELEASE_NOTES.md --target $env:GITHUB_SHA
+          }

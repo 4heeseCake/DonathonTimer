@@ -3,8 +3,8 @@ import os
 
 APP_NAME = "Donathon Timer"
 APP_ID = "donathon.timer"
-APP_VERSION = "0.9.4 Beta 1"
-OVERLAY_BUILD = "0.9.4-beta1"
+APP_VERSION = "0.9.4 Beta 2"
+OVERLAY_BUILD = "0.9.4-beta2"
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 17321
 OVERLAY_BASE_URL = f"http://{SERVER_HOST}:{SERVER_PORT}/overlay"

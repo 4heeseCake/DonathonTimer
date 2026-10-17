@@ -35,6 +35,7 @@ def run() -> None:
     server.start()
 
     window = MainWindow(state, storage, da_service, twitch_service, speech_service, entertainment_service)
+    window.local_server = server
     app.aboutToQuit.connect(speech_service.shutdown)
     window.show()
     raise SystemExit(app.exec())

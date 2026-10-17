@@ -3175,6 +3175,17 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("DonationAlerts Client ID сохранён",3000)
 
     def _connect_da(self) -> None:
+        server = getattr(self, "local_server", None)
+        if server is not None and not server.is_ready():
+            error = server.startup_error or "Локальный сервер ещё не запустился или порт 17321 занят."
+            QMessageBox.warning(
+                self, "DonationAlerts — локальный сервер не работает",
+                "Не могу начать авторизацию: сервер Donathon Timer недоступен на "
+                "http://127.0.0.1:17321.\n\n"
+                + error + "\n\nПодробности в файле:\n" + str(server.log_path)
+                + "\n\nПерезапусти программу. Если проблема сохранится, проверь порт 17321.",
+            )
+            return
         if not self.da_service.client_id():
             QMessageBox.information(self,"DonationAlerts","Сначала один раз укажи Client ID приложения DonationAlerts. При регистрации приложения используй Redirect URI:\n\n"+DONATIONALERTS_REDIRECT_URI)
             self._setup_da()

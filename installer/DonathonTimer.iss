@@ -6,8 +6,8 @@
   #error OutputDir must be set via /DOutputDir=<absolute directory>
 #endif
 #define ProductName "Donathon Timer"
-#define ProductVersion "0.9.4 Beta 1"
-#define VersionTag "0.9.4-beta1"
+#define ProductVersion "0.9.4 Beta 2"
+#define VersionTag "0.9.4-beta2"
 
 [Setup]
 AppId={{B053CAED-81CB-47CA-9EA5-35A793372FAA}
