@@ -1,10 +1,10 @@
 # Builds two standalone Windows programs, one beta setup, a portable archive,
 # and a separately downloadable optional speech component.
-# Example: powershell -ExecutionPolicy Bypass -File buildtools\build-windows.ps1 -Repo user/DonathonTimer -Tag v0.9.4-beta2
+# Example: powershell -ExecutionPolicy Bypass -File buildtools\build-windows.ps1 -Repo user/DonathonTimer -Tag v0.9.4-beta3
 [CmdletBinding()]
 param(
     [string]$Repo = "",
-    [string]$Tag = "v0.9.4-beta2",
+    [string]$Tag = "v0.9.4-beta3",
     [string]$Python = "py -3.12"
 )
 $ErrorActionPreference = 'Stop'
@@ -33,7 +33,7 @@ try {
     $releaseDir = Join-Path $root 'release'
     New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
     Get-ChildItem $releaseDir -File | Where-Object { $_.Extension -in '.exe', '.zip' -or $_.Name -eq 'SHA256SUMS.txt' } | Remove-Item -Force
-    $version = '0.9.4-beta2'
+    $version = '0.9.4-beta3'
 
     # Optional self-contained speech worker; users only fetch it by opting in.
     & $pyExe -m PyInstaller --clean --noconfirm --onedir --console --name DonathonSpeechWorker `

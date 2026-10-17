@@ -1586,7 +1586,7 @@ class MainWindow(QMainWindow):
         row=QHBoxLayout(); row.setSpacing(10)
         self.analysis_scope_combo=QComboBox(); self.analysis_scope_combo.addItems(["Период времени","Конкретная сессия"]); self.analysis_scope_combo.currentIndexChanged.connect(self._analysis_scope_changed)
         self.analysis_period_label=QLabel("Период:"); self.analysis_period_combo=QComboBox(); self.analysis_period_combo.addItems(["Сегодня","Последние 7 дней","Последние 30 дней","За всё время","Свой период"]); self.analysis_period_combo.currentIndexChanged.connect(self._analysis_period_changed)
-        self.analysis_session_label=QLabel("Сессия:"); self.analysis_session_combo=QComboBox(); self.analysis_session_combo.currentIndexChanged.connect(lambda _i:self._refresh_analysis(force=True))
+        self.analysis_session_label=QLabel("Сессия:"); self.analysis_session_combo=QComboBox(); self.analysis_session_combo.activated.connect(lambda _i:self._analysis_session_changed(self.analysis_session_combo))
         row.addWidget(QLabel("Смотреть:")); row.addWidget(self.analysis_scope_combo); row.addSpacing(8); row.addWidget(self.analysis_period_label); row.addWidget(self.analysis_period_combo,1); row.addWidget(self.analysis_session_label); row.addWidget(self.analysis_session_combo,2); cl.addLayout(row)
         now=dt.datetime.now(); start=now-dt.timedelta(days=7)
         self.analysis_custom_widget=QWidget(); custom=QHBoxLayout(self.analysis_custom_widget); custom.setContentsMargins(0,0,0,0); custom.setSpacing(8)
@@ -1656,12 +1656,18 @@ class MainWindow(QMainWindow):
         reload_devices=QPushButton("Обновить список микрофонов"); reload_devices.clicked.connect(self._refresh_speech_devices)
         self.transcribe_btn=QPushButton("Распознать речь выбранной сессии"); self.transcribe_btn.setObjectName("Primary"); self.transcribe_btn.clicked.connect(self._transcribe_selected_session)
         speech_grid.addWidget(self.speech_enabled,0,0,1,2); speech_grid.addWidget(self.speech_delete_audio,1,0,1,2); speech_grid.addWidget(QLabel("Микрофон:"),2,0); speech_grid.addWidget(self.speech_device_combo,2,1)
-        speech_grid.addWidget(QLabel("Точность:"),3,0); speech_grid.addWidget(self.speech_model_combo,3,1); speech_grid.addWidget(reload_devices,4,1); speech_grid.addWidget(self.transcribe_btn,5,1); speech_grid.setColumnStretch(1,1); spl.addLayout(speech_grid)
+        speech_grid.addWidget(QLabel("Точность:"),3,0); speech_grid.addWidget(self.speech_model_combo,3,1); speech_grid.addWidget(reload_devices,4,1); speech_grid.setColumnStretch(1,1); spl.addLayout(speech_grid)
+        transcribe_row=QHBoxLayout(); transcribe_row.setSpacing(8)
+        self.speech_session_combo=QComboBox(); self.speech_session_combo.setMinimumWidth(200)
+        self.speech_session_combo.setToolTip("Выбери сессию — графики выше обновятся автоматически. Колесо мыши не меняет выбор.")
+        self.speech_session_combo.activated.connect(lambda _i:self._analysis_session_changed(self.speech_session_combo))
+        transcribe_row.addWidget(QLabel("Сессия:")); transcribe_row.addWidget(self.speech_session_combo,2)
+        transcribe_row.addWidget(self.transcribe_btn,2); spl.addLayout(transcribe_row)
         help_row=QHBoxLayout(); install_hint=QLabel("Компонент распознавания ставится прямо из приложения. В установочной версии компонент скачивается и устанавливается по кнопке. Для него нужен интернет. Первая модель речи загрузится отдельно при распознавании."); install_hint.setObjectName("Muted"); install_hint.setWordWrap(True); help_row.addWidget(install_hint,1)
         self.install_speech_btn=QPushButton("Установить анализ речи"); self.install_speech_btn.clicked.connect(self._install_speech_ai); help_row.addWidget(self.install_speech_btn)
         guide_btn=QPushButton("Показать инструкцию"); guide_btn.clicked.connect(lambda:self._switch_page(self.PAGE_GUIDE)); help_row.addWidget(guide_btn); spl.addLayout(help_row); layout.addWidget(speech)
         layout.addStretch()
-        self._refresh_speech_devices(); self._populate_analysis_sessions(); self._update_analysis_filter_visibility(); self._clear_analysis_sections("Выбери период или сессию — графики загрузятся, когда откроешь Анализ.")
+        self._refresh_speech_devices(); self._populate_analysis_sessions(); self._analysis_scope_changed(); self._clear_analysis_sections("Выбери период или сессию — графики загрузятся, когда откроешь Анализ.")
 
     def _build_guide_page(self) -> None:
         scroll, _, layout = self._make_scroll_page(); self.stack.addWidget(scroll)
@@ -1728,7 +1734,7 @@ class MainWindow(QMainWindow):
         add_step("teal","8 · Если нужен анализ речи стримера",
             "1) Открой Анализ → Настройка анализа речи и нажми «Установить анализ речи», если компонент ещё не установлен.\n"
             "2) Выбери микрофон и включи сохранение голоса во время активной сессии.\n"
-            "3) После окончания стрима выбери эту сессию сверху и нажми «Распознать речь выбранной сессии».\n"
+            "3) После стрима выбери сессию прямо рядом с кнопкой «Распознать речь выбранной сессии» внизу Анализа. Выбор автоматически обновит графики сверху.\n"
             "Тяжёлая обработка запускается после стрима отдельно от основного окна. В установочной версии приложения отдельный файл запускать не потребуется.",
             [("Открыть Анализ",lambda:self._switch_page(self.PAGE_ANALYSIS),True)])
 
@@ -1771,8 +1777,7 @@ class MainWindow(QMainWindow):
         mt=QLabel("Обычная рулетка"); mt.setObjectName("SectionTitle"); mcl.addWidget(mt)
         row=QHBoxLayout(); row.addWidget(QLabel("Название:")); self.manual_roulette_title=QLineEdit("Что выбираем?"); row.addWidget(self.manual_roulette_title,1); mcl.addLayout(row)
         mcl.addWidget(QLabel("Варианты — по одному на строку:")); self.manual_roulette_options=QPlainTextEdit(); self.manual_roulette_options.setPlaceholderText("Cyberpunk\nГарри Поттер\nCS2"); self.manual_roulette_options.setMinimumHeight(120); mcl.addWidget(self.manual_roulette_options)
-        opts=QHBoxLayout(); opts.addWidget(QLabel("Режим:")); self.manual_roulette_mode=QComboBox(); self.manual_roulette_mode.addItem("Первый выпавший — победитель","winner"); self.manual_roulette_mode.addItem("Выпавший выбывает — до последнего","elimination"); opts.addWidget(self.manual_roulette_mode,1)
-        self.manual_roulette_overlay=QCheckBox("Показывать в OBS над таймером"); self.manual_roulette_overlay.setChecked(True); self.manual_roulette_overlay.setVisible(False); opts.addWidget(self.manual_roulette_overlay); mcl.addLayout(opts)
+        self.manual_roulette_overlay=QCheckBox("Показывать в OBS над таймером"); self.manual_roulette_overlay.setChecked(True); self.manual_roulette_overlay.setVisible(False)
         br=QHBoxLayout(); prep=QPushButton("Подготовить рулетку"); prep.setObjectName("Primary"); prep.setObjectName("Primary"); prep.clicked.connect(self._prepare_manual_roulette); spin=QPushButton("Крутить"); spin.setObjectName("OrangePrimary"); spin.clicked.connect(self._spin_roulette); clear=QPushButton("Очистить"); clear.setObjectName("Danger"); clear.clicked.connect(self._clear_roulette)
         br.addWidget(prep); br.addWidget(spin); br.addWidget(clear); br.addStretch(); mcl.addLayout(br); ml.addWidget(mc); self.entertainment_stack.addWidget(manual)
 
@@ -1816,7 +1821,12 @@ class MainWindow(QMainWindow):
         controls=QHBoxLayout(); controls.setSpacing(8)
         self.entertainment_show_interactive=QPushButton("Показать интерактив"); self.entertainment_show_interactive.setObjectName("Primary"); self.entertainment_show_interactive.setCheckable(True); self.entertainment_show_interactive.toggled.connect(self._entertainment_interactive_visibility_changed); controls.addWidget(self.entertainment_show_interactive)
         self.entertainment_show_timer=QPushButton("Показать таймер"); self.entertainment_show_timer.setObjectName("Chip"); self.entertainment_show_timer.setCheckable(True); self.entertainment_show_timer.toggled.connect(self._entertainment_timer_visibility_changed); controls.addWidget(self.entertainment_show_timer)
-        controls.addWidget(QLabel("Прокрут:")); self.roulette_spin_speed=QComboBox(); self.roulette_spin_speed.addItem("Моментальная", "fast"); self.roulette_spin_speed.addItem("Плавная", "normal"); self.roulette_spin_speed.currentIndexChanged.connect(self._roulette_spin_speed_changed); self.roulette_spin_speed.setMaximumWidth(160); controls.addWidget(self.roulette_spin_speed); controls.addStretch(); controls.addWidget(self.entertainment_obs_status)
+        controls.addWidget(QLabel("Прокрут:")); self.roulette_spin_speed=QComboBox(); self.roulette_spin_speed.addItem("Моментальная", "fast"); self.roulette_spin_speed.addItem("Плавная", "normal"); self.roulette_spin_speed.currentIndexChanged.connect(self._roulette_spin_speed_changed); self.roulette_spin_speed.setMaximumWidth(160); controls.addWidget(self.roulette_spin_speed)
+        self.manual_roulette_mode_label=QLabel("Режим:"); controls.addWidget(self.manual_roulette_mode_label)
+        self.manual_roulette_mode=QComboBox(); self.manual_roulette_mode.addItem("Сразу победитель", "winner"); self.manual_roulette_mode.addItem("Выпавший выбывает", "elimination")
+        self.manual_roulette_mode.setToolTip("Применяется сразу; текущие участники сохраняются. Победители не участвуют в следующих прокрутах.")
+        self.manual_roulette_mode.setMinimumWidth(150); self.manual_roulette_mode.currentIndexChanged.connect(self._manual_roulette_mode_changed)
+        controls.addWidget(self.manual_roulette_mode); controls.addStretch(); controls.addWidget(self.entertainment_obs_status)
         rl.addLayout(controls,1,0,1,2)
         self.entertainment_wheel=WheelPreview(); self.entertainment_wheel.set_mode(self.ui_theme); self.entertainment_wheel.clicked.connect(self._spin_roulette); rl.addWidget(self.entertainment_wheel,2,0)
         side=QVBoxLayout(); self.roulette_live_status=QLabel("Рулетка ещё не подготовлена"); self.roulette_live_status.setObjectName("Muted"); self.roulette_live_status.setWordWrap(True); side.addWidget(self.roulette_live_status)
@@ -1870,6 +1880,17 @@ class MainWindow(QMainWindow):
             return
         self.entertainment_service.set_roulette_spin_speed(str(self.roulette_spin_speed.currentData() or "normal"))
 
+    def _manual_roulette_mode_changed(self, *args) -> None:
+        if not hasattr(self,"manual_roulette_mode"):
+            return
+        mode=str(self.manual_roulette_mode.currentData() or "winner")
+        try:
+            self.entertainment_service.set_manual_selection_mode(mode)
+            self.statusBar().showMessage("Режим рулетки изменён · применяется со следующей прокрутки",3200)
+            self._refresh_entertainment()
+        except ValueError as exc:
+            QMessageBox.warning(self,"Рулетка",str(exc))
+
     def _set_entertainment_mode(self, index: int) -> None:
         index=max(0,min(3,int(index)))
         mode=("manual","chat","donation","poll")[index]
@@ -1893,6 +1914,8 @@ class MainWindow(QMainWindow):
         if hasattr(self,"entertainment_roulette_live_card"):
             self.entertainment_roulette_live_card.setVisible(index<3)
             self.entertainment_poll_live_card.setVisible(index==3)
+            self.manual_roulette_mode_label.setVisible(index==0)
+            self.manual_roulette_mode.setVisible(index==0)
         self._refresh_entertainment()
 
     @staticmethod
@@ -1958,6 +1981,13 @@ class MainWindow(QMainWindow):
             if btn is not None:
                 btn.blockSignals(True); btn.setChecked(interactive_visible); btn.setText(("Скрыть " if interactive_visible else "Показать ")+interactive_noun); btn.blockSignals(False)
         spin_speed = str(r.get("spin_speed") or "normal")
+        if hasattr(self,"manual_roulette_mode"):
+            current_mode=str(r.get("manual_mode") or "winner")
+            idx=self.manual_roulette_mode.findData(current_mode)
+            if idx>=0 and self.manual_roulette_mode.currentIndex()!=idx:
+                self.manual_roulette_mode.blockSignals(True)
+                self.manual_roulette_mode.setCurrentIndex(idx)
+                self.manual_roulette_mode.blockSignals(False)
         if hasattr(self, "roulette_spin_speed"):
             self.roulette_spin_speed.blockSignals(True)
             idx = self.roulette_spin_speed.findData(spin_speed)
@@ -1968,10 +1998,10 @@ class MainWindow(QMainWindow):
         self.entertainment_obs_status.setText(names.get(display,"OBS-интерактив активен"))
         self.entertainment_wheel.set_snapshot(r)
         if (not r.get("spinning") and r.get("mode")=="manual" and
-                r.get("manual_mode")=="elimination" and int(r.get("spin_nonce") or 0)>0):
+                r.get("result") and int(r.get("spin_nonce") or 0)>0):
             nonce=int(r.get("spin_nonce") or 0)
-            if getattr(self, "_last_completed_elimination_nonce", None)!=nonce:
-                self._last_completed_elimination_nonce=nonce
+            if getattr(self, "_last_completed_manual_spin_nonce", None)!=nonce:
+                self._last_completed_manual_spin_nonce=nonce
                 self.manual_roulette_options.setPlainText("\n".join(r.get("manual_options") or []))
         entries=list(r.get("entries") or []); visible_entries=entries[:500]; self.roulette_live_table.setRowCount(len(visible_entries))
         for row,item in enumerate(visible_entries):
@@ -2123,6 +2153,7 @@ class MainWindow(QMainWindow):
             self._refresh_donations(force=self._donations_signature is None)
         elif index==self.PAGE_ANALYSIS:
             self._analysis_release_generation += 1
+            self._populate_analysis_sessions()
             self._refresh_analysis(force=self._analysis_signature is None)
         elif index==self.PAGE_ENTERTAINMENT:
             self._refresh_entertainment()
@@ -2316,7 +2347,7 @@ class MainWindow(QMainWindow):
         if page==self.PAGE_HISTORY: self._refresh_history(force=True)
         elif page==self.PAGE_SESSIONS: self._refresh_sessions_archive(force=True)
         elif page==self.PAGE_DONATIONS: self._refresh_donations(force=True)
-        elif page==self.PAGE_ANALYSIS: self._refresh_analysis(force=True)
+        elif page==self.PAGE_ANALYSIS: self._populate_analysis_sessions(); self._refresh_analysis(force=True)
         elif page==self.PAGE_ENTERTAINMENT: self._refresh_entertainment()
         elif page==self.PAGE_SETTINGS: self._refresh_storage_usage()
 
@@ -2668,7 +2699,9 @@ class MainWindow(QMainWindow):
             return
         by_session=self.analysis_scope_combo.currentIndex()==1
         self.analysis_period_label.setVisible(not by_session); self.analysis_period_combo.setVisible(not by_session)
-        self.analysis_session_label.setVisible(by_session); self.analysis_session_combo.setVisible(by_session)
+        # Keep the session selector discoverable even if the current filter is a
+        # time period. Selecting any session switches the complete page to it.
+        self.analysis_session_label.setVisible(True); self.analysis_session_combo.setVisible(True)
         self._populate_analysis_sessions()
         self._update_analysis_filter_visibility()
         self._analysis_signature=None; self._analysis_context_key=None
@@ -2697,20 +2730,74 @@ class MainWindow(QMainWindow):
                 self._refresh_analysis(force=True)
 
     def _populate_analysis_sessions(self) -> None:
-        if not hasattr(self,"analysis_session_combo"):
+        """Reconcile both selectors without rebuilding an open Qt popup.
+
+        Recreating QComboBox items every 1.2 seconds closes its dropdown and
+        makes it seem impossible to click a session. Rebuild only if the DB
+        contents changed, e.g. after creating, renaming or ending a session.
+        """
+        if not hasattr(self, "analysis_session_combo"):
             return
-        current=self.analysis_session_combo.currentData()
         sessions=self.storage.list_sessions(self.state.profile.id,limit=500)
-        self.analysis_session_combo.blockSignals(True); self.analysis_session_combo.clear()
+        items=[]
         for item in sessions:
             started=dt.datetime.fromtimestamp(item.started_at).strftime("%d.%m.%Y %H:%M")
             suffix=" · идёт" if item.ended_at is None else ""
-            self.analysis_session_combo.addItem(f"{item.name} · {started}{suffix}", item.id)
-        if current is not None:
-            for i in range(self.analysis_session_combo.count()):
-                if self.analysis_session_combo.itemData(i)==current:
-                    self.analysis_session_combo.setCurrentIndex(i); break
-        self.analysis_session_combo.blockSignals(False)
+            items.append((f"{item.name} · {started}{suffix}",item.id))
+        profile=self.state.profile.id
+        signature=(profile,tuple(items))
+        if signature==getattr(self,"_analysis_sessions_list_signature",None):
+            return
+        combos=[self.analysis_session_combo]
+        if hasattr(self,"speech_session_combo"):
+            combos.append(self.speech_session_combo)
+        # Never replace a popup's model while the user is clicking an entry.
+        if any(c.view().isVisible() for c in combos):
+            return
+        same_profile=profile==getattr(self,"_analysis_sessions_profile",None)
+        previous=self.analysis_session_combo.currentData() if same_profile else None
+        self._analysis_sessions_profile=profile
+        self._analysis_sessions_list_signature=signature
+        valid_ids={item_id for _,item_id in items}
+        chosen=previous if previous in valid_ids else (items[0][1] if items else None)
+        for combo in combos:
+            combo.blockSignals(True)
+            combo.clear()
+            if not items:
+                combo.addItem("Нет сессий — сначала создай сессию",None)
+            else:
+                for label,session_id in items:
+                    combo.addItem(label,session_id)
+                index=combo.findData(chosen)
+                if index>=0: combo.setCurrentIndex(index)
+            combo.blockSignals(False)
+
+    def _analysis_session_changed(self, sender: QComboBox) -> None:
+        """Sync top/bottom selection, even on re-click of the only item.
+
+        The QComboBox.activated signal is deliberate: currentIndexChanged does
+        not fire when clicking an already-selected (often only) session.
+        """
+        if not hasattr(self,"speech_session_combo"):
+            return
+        session_id=sender.currentData()
+        if session_id is None:
+            return
+        for combo in (self.analysis_session_combo,self.speech_session_combo):
+            if combo is not sender:
+                index=combo.findData(session_id)
+                if index>=0:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(index)
+                    combo.blockSignals(False)
+        self._analysis_signature=None
+        self._analysis_context_key=None
+        if self.analysis_scope_combo.currentIndex()!=1:
+            # Emits _analysis_scope_changed(), which updates all four graphs.
+            self.analysis_scope_combo.setCurrentIndex(1)
+        elif self.stack.currentIndex()==self.PAGE_ANALYSIS:
+            self._refresh_analysis(force=True)
+        self._update_speech_install_ui()
 
     def _analysis_period_bounds(self) -> tuple[float|None,float|None]:
         idx=self.analysis_period_combo.currentIndex(); now=dt.datetime.now()
@@ -2726,7 +2813,7 @@ class MainWindow(QMainWindow):
     def _analysis_context(self) -> tuple[int|None,float|None,float|None,str]:
         by_session=self.analysis_scope_combo.currentIndex()==1
         if by_session:
-            self._populate_analysis_sessions(); session_id=self.analysis_session_combo.currentData()
+            session_id=self.analysis_session_combo.currentData()
             if session_id is None: return None,None,None,"Создай или выбери сессию — после этого здесь появятся её графики."
             session=self.storage.get_session(self.state.profile.id,int(session_id))
             if not session: return None,None,None,"Сессия не найдена"
@@ -2806,7 +2893,7 @@ class MainWindow(QMainWindow):
         self.analysis_chat_cloud.set_mode(self.ui_theme); self.analysis_chat_cloud.set_words(chat_counts)
         self.analysis_speech_cloud.set_mode(self.ui_theme); self.analysis_speech_cloud.set_words(speech_counts)
         self._update_speech_install_ui()
-        self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_scope_combo.currentIndex()==1 and self.analysis_session_combo.currentData() is not None)
+        self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_session_combo.currentData() is not None)
 
     def _release_analysis_memory(self) -> None:
         for name in ("analysis_donation_timeline","analysis_viewer_timeline","analysis_chat_timeline","analysis_speech_timeline"):
@@ -2826,7 +2913,7 @@ class MainWindow(QMainWindow):
             self.install_speech_btn.setEnabled(not installed and not installing)
             self.install_speech_btn.setText("Анализ речи установлен" if installed else ("Установка…" if installing else "Установить анализ речи"))
         if hasattr(self,"transcribe_btn"):
-            self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_scope_combo.currentIndex()==1 and self.analysis_session_combo.currentData() is not None)
+            self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_session_combo.currentData() is not None)
 
     def _install_speech_ai(self) -> None:
         if self.speech_service.has_transcriber():
@@ -2858,10 +2945,14 @@ class MainWindow(QMainWindow):
         self.speech_service.set_enabled(bool(checked)); self._refresh_analysis(force=True)
 
     def _transcribe_selected_session(self) -> None:
-        if self.analysis_scope_combo.currentIndex()!=1:
-            QMessageBox.information(self,"Речь стримера","Для распознавания выбери «Конкретная сессия». Запись хранится по сессиям, чтобы временные метки совпадали с остальной аналитикой."); return
-        session_id=self.analysis_session_combo.currentData()
-        if session_id is None: return
+        session_id=self.speech_session_combo.currentData() if hasattr(self,"speech_session_combo") else self.analysis_session_combo.currentData()
+        if session_id is None:
+            QMessageBox.information(self,"Речь стримера","Сначала создай сессию и запиши голос во время неё.")
+            return
+        # Transcription should work directly from the footer, even when the
+        # viewer was inspecting a time period before clicking this button.
+        if self.analysis_scope_combo.currentIndex()!=1 or self.analysis_session_combo.currentData()!=session_id:
+            self._analysis_session_changed(self.speech_session_combo)
         try:
             self.speech_service.transcribe_session(self.state.profile.id,int(session_id))
             self.statusBar().showMessage("Распознавание запущено в фоне после стрима",4000)

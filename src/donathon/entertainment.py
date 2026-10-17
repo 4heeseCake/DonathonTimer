@@ -258,6 +258,22 @@ class EntertainmentService:
                 self._save_locked()
         self._notify()
 
+    def set_manual_selection_mode(self, mode: str) -> None:
+        """Switch winner/elimination immediately without rebuilding the wheel.
+
+        Previously configure_manual() was the only way to change this option,
+        which also restored all original entries and spoiled an ongoing game.
+        """
+        if mode not in {"winner","elimination"}:
+            raise ValueError("Неизвестный режим рулетки")
+        with self._lock:
+            r=self._data["roulette"]
+            if r.get("manual_mode")==mode:
+                return
+            r["manual_mode"]=mode
+            self._save_locked()
+        self._notify()
+
     def set_roulette_spin_speed(self, speed: str) -> None:
         with self._lock:
             self._data["roulette"]["spin_speed"] = "fast" if speed == "fast" else "normal"
@@ -345,14 +361,16 @@ class EntertainmentService:
             target_rotation = (360.0 - target_point) % 360.0
             mode = str(r.get("mode") or "")
             manual_mode = str(r.get("manual_mode") or "")
-            remove = (mode == "manual" and manual_mode == "elimination" and len(entries) > 1)
-            if remove:
-                if len(entries) == 2:
-                    # Last round: show the one remaining as winner, not the one eliminated.
-                    remaining = next(item["label"] for item in entries if item["key"] != chosen["key"])
-                    display_label, display_status = remaining, "ПОБЕДИТЕЛЬ"
-                else:
-                    display_label, display_status = chosen["label"], "ВЫБЫВШИЙ"
+            # In winner mode, remove the winning option *after the spin* too:
+            # streamers can pick several different winners, then continue the
+            # elimination game from the remaining pool without re-preparing.
+            remove = (mode == "manual" and len(entries) > 1)
+            if mode == "manual" and manual_mode == "elimination" and len(entries)==2:
+                # Last round: report the surviving winner, not the eliminated one.
+                remaining = next(item["label"] for item in entries if item["key"] != chosen["key"])
+                display_label, display_status = remaining, "ПОБЕДИТЕЛЬ"
+            elif mode == "manual" and manual_mode == "elimination" and len(entries)>2:
+                display_label, display_status = chosen["label"], "ВЫБЫВШИЙ"
             else:
                 display_label, display_status = chosen["label"], "ПОБЕДИТЕЛЬ"
             duration = 1.6 if str(r.get("spin_speed") or "normal") == "fast" else 6.2

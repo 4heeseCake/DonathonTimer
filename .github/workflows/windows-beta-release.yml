@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.9.4-beta2)'
+        description: 'Release tag (e.g. v0.9.4-beta3)'
         required: true
-        default: 'v0.9.4-beta2'
+        default: 'v0.9.4-beta3'
 
 permissions:
   contents: write
@@ -25,6 +25,9 @@ jobs:
         with:
           python-version: '3.12'
           architecture: 'x64'
+      - name: Run backend smoke tests (no GUI)
+        shell: pwsh
+        run: python -m unittest discover -s buildtools -p 'test_*.py' -v
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
