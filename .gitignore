@@ -6,3 +6,10 @@ build/
 dist/
 release/
 *.spec
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+*.log
+recordings/
