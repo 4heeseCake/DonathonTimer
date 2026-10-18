@@ -23,6 +23,7 @@ from .storage import Storage
 class SpeechStatus:
     code: str
     text: str
+    progress: int | None = None
 
 
 def _transcribe_process(
@@ -72,7 +73,7 @@ def _transcribe_process(
                     Path(rec["path"]).unlink(missing_ok=True)
                 except Exception:
                     pass
-        progress_queue.put(("done", "Распознавание завершено · текст добавлен в Анализ"))
+        progress_queue.put(("done", "Готово! Распознанные слова появились в Анализе."))
     except Exception as exc:
         progress_queue.put(("error", f"Ошибка распознавания речи: {exc}"))
 
@@ -102,11 +103,11 @@ class SpeechService:
 
     def status(self) -> SpeechStatus:
         with self._lock:
-            return SpeechStatus(self._status.code, self._status.text)
+            return SpeechStatus(self._status.code, self._status.text, self._status.progress)
 
-    def _set_status(self, code: str, text: str) -> None:
+    def _set_status(self, code: str, text: str, progress: int | None = None) -> None:
         with self._lock:
-            self._status = SpeechStatus(code, text)
+            self._status = SpeechStatus(code, text, progress)
 
     def enabled(self) -> bool:
         return (self.storage.get_setting("speech_recording_enabled") or "0") == "1"
@@ -255,7 +256,9 @@ class SpeechService:
             if transcribing or self.installing():
                 return  # Don't overwrite download/transcription progress during idle refresh.
             if self.enabled():
-                self._set_status("armed", "Микрофон готов · запись начнётся вместе с активной сессией")
+                # Don't overwrite the actual worker result every 1.5 seconds.
+                if self.status().code not in {"done", "error", "ready"}:
+                    self._set_status("armed", "Микрофон готов · запись начнётся вместе с активной сессией")
             else:
                 # Keep the final recognition result visible until the next action.
                 if self.status().code not in {"done", "error", "ready"}:
@@ -345,6 +348,32 @@ class SpeechService:
         if writer and writer.is_alive():
             writer.join(timeout=2)
 
+    def recording_summary(self, profile_id: int, session_id: int | None) -> str:
+        """User-friendly recording check without needing a running speech model."""
+        if session_id is None:
+            return "Выбери сессию, чтобы проверить, сохранился ли звук."
+        rows = self.storage.list_speech_recordings(profile_id, session_id=int(session_id))
+        if not rows:
+            return "Для этой сессии нет записи голоса. Включи запись ДО запуска новой сессии."
+        found = 0
+        seconds = 0.0
+        total_bytes = 0
+        for item in rows:
+            audio = Path(str(item.get("path") or ""))
+            if audio.is_file():
+                found += 1
+                total_bytes += audio.stat().st_size
+                try:
+                    with wave.open(str(audio), "rb") as wav:
+                        seconds += wav.getnframes() / max(1, wav.getframerate())
+                except (wave.Error, OSError):
+                    pass
+        if found:
+            return f"Запись найдена: {found} файл(ов), около {int(seconds)} сек., {total_bytes / 1024 / 1024:.1f} МБ."
+        if all(str(r.get("status")) == "transcribed" for r in rows):
+            return "Запись уже распознана и удалена по настройке. Результат ищи выше в «Речь стримера»."
+        return "Запись сессии недоступна. Проверь микрофон и настройку сохранения голоса."
+
     def transcribe_session(self, profile_id: int, session_id: int) -> None:
         if not self.has_transcriber():
             raise RuntimeError("Сначала нажмите «Установить анализ речи» в этом разделе.")
@@ -356,7 +385,7 @@ class SpeechService:
         recordings = self.storage.list_speech_recordings(profile_id, session_id=session_id)
         pending = [r for r in recordings if r["status"] in {"recorded", "error"} and Path(r["path"]).exists()]
         if not pending:
-            raise RuntimeError("Для этой сессии нет необработанных аудиозаписей")
+            raise RuntimeError(self.recording_summary(profile_id, session_id) + " Нечего распознавать повторно.")
 
         if getattr(sys, "frozen", False):
             self._transcribe_frozen(int(profile_id), int(session_id), pending)
@@ -371,7 +400,7 @@ class SpeechService:
             daemon=True,
         )
         self._transcription_process = proc
-        self._set_status("transcribing", f"Распознаю речь после стрима · файлов: {len(pending)}")
+        self._set_status("transcribing", f"Подготавливаю распознавание · записей: {len(pending)}", 0)
         proc.start()
 
         def monitor() -> None:
@@ -431,7 +460,7 @@ class SpeechService:
             job_path.unlink(missing_ok=True)
             raise
         self._transcription_process = proc
-        self._set_status("transcribing", f"Распознаю речь после стрима · файлов: {len(pending)}")
+        self._set_status("transcribing", f"Подготавливаю распознавание · записей: {len(pending)}", 0)
 
         def monitor() -> None:
             final_seen = False
@@ -442,7 +471,7 @@ class SpeechService:
                         event = json.loads(line)
                         code = str(event.get("code") or "progress")
                         message = str(event.get("text") or "")
-                        self._set_status(code, message)
+                        self._set_status(code, message, event.get("progress"))
                         if code in {"done", "error"}:
                             final_seen = True
                     except (ValueError, AttributeError):
@@ -450,8 +479,8 @@ class SpeechService:
                 return_code = proc.wait()
                 if not final_seen:
                     self._set_status(
-                        "done" if return_code == 0 else "error",
-                        "Расшифровка завершена" if return_code == 0 else f"Модуль речи завершился с ошибкой ({return_code})",
+                        "error",
+                        f"Не удалось получить результат распознавания (код {return_code}). Попробуй ещё раз.",
                     )
             finally:
                 job_path.unlink(missing_ok=True)

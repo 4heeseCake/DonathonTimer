@@ -86,6 +86,8 @@ class EntertainmentService:
                 "spin_angle": 0.0,
                 "spin_speed": "normal",  # fast | normal
                 "pending_spin": None,     # outcome is committed only after wheel stops
+                "last_winner": "",     # persistently shown outside the rotating wheel
+                "next_winner_exclusion": "",  # defer winner removal until NEXT spin
                 "spin_started_at": None,
                 "spin_ends_at": None,
                 "started_at": None,
@@ -175,7 +177,8 @@ class EntertainmentService:
         with self._lock:
             r = self._data["roulette"]
             r.update({"mode":"manual", "title":_safe_label(title,"Рулетка"), "manual_mode": mode if mode in {"winner","elimination"} else "winner",
-                      "manual_options":cleaned, "collecting":False, "overlay_enabled":bool(overlay_enabled), "result":"", "result_status":""})
+                      "manual_options":cleaned, "collecting":False, "overlay_enabled":bool(overlay_enabled), "result":"", "result_status":"",
+                      "last_winner":"", "next_winner_exclusion":"", "pending_spin":None, "spin_started_at":None, "spin_ends_at":None})
             self._data["active_mode"] = "manual"
             self._save_locked()
         self._notify()
@@ -188,7 +191,7 @@ class EntertainmentService:
             r = self._data["roulette"]
             r.update({"mode":"chat", "title":_safe_label(title,"Розыгрыш из чата"), "chat_keyword":keyword,
                       "chat_match":match if match in {"exact","contains"} else "exact", "chat_entries":{}, "collecting":True,
-                      "overlay_enabled":bool(overlay_enabled), "result":"", "result_status":"", "started_at":time.time()})
+                      "overlay_enabled":bool(overlay_enabled), "result":"", "result_status":"", "last_winner":"", "next_winner_exclusion":"", "pending_spin":None, "started_at":time.time()})
             self._data["active_mode"] = "chat"
             self._save_locked()
         self._notify()
@@ -197,7 +200,7 @@ class EntertainmentService:
         with self._lock:
             r = self._data["roulette"]
             r.update({"mode":"donation", "title":_safe_label(title,"Донат-рулетка"), "donation_options":{}, "collecting":True,
-                      "overlay_enabled":bool(overlay_enabled), "result":"", "result_status":"", "started_at":time.time()})
+                      "overlay_enabled":bool(overlay_enabled), "result":"", "result_status":"", "last_winner":"", "next_winner_exclusion":"", "pending_spin":None, "started_at":time.time()})
             self._data["active_mode"] = "donation"
             self._save_locked()
         self._notify()
@@ -248,6 +251,8 @@ class EntertainmentService:
                     r["mode"] = mode
                     r["result"] = ""
                     r["result_status"] = ""
+                    r["last_winner"] = ""
+                    r["next_winner_exclusion"] = ""
                     changed = True
                 if title is not None:
                     clean_title = _safe_label(title, "Рулетка")
@@ -307,8 +312,14 @@ class EntertainmentService:
             except ValueError:
                 pass
             r["manual_options"] = options
+        # A winner remains visible on the wheel through the result screen.
+        # It is removed only when the host starts the NEXT spin, not now.
+        if pending.get("defer_winner_removal"):
+            r["next_winner_exclusion"] = str(pending.get("removed_label") or "")
         r["result"] = str(pending.get("display_label") or "")
         r["result_status"] = str(pending.get("display_status") or "")
+        if r["result_status"] == "ПОБЕДИТЕЛЬ":
+            r["last_winner"] = r["result"]
         r["pending_spin"] = None
         r["spin_started_at"] = None
         r["spin_ends_at"] = None
@@ -337,6 +348,17 @@ class EntertainmentService:
             r = self._data["roulette"]
             if r.get("pending_spin"):
                 raise ValueError("Колесо ещё крутится — дождитесь остановки")
+            # Only now remove the previous winner. This preserves the result
+            # on the actual wheel until the host presses GO again.
+            previous = str(r.get("next_winner_exclusion") or "")
+            if r.get("mode") == "manual" and previous:
+                current = list(r.get("manual_options") or [])
+                if previous in current:
+                    if len(current) <= 1:
+                        raise ValueError("Все варианты уже выбраны. Подготовь новую рулетку.")
+                    current.remove(previous)
+                    r["manual_options"] = current
+                r["next_winner_exclusion"] = ""
             entries = self._roulette_entries_locked()
             if not entries:
                 raise ValueError("В рулетке пока нет вариантов")
@@ -361,10 +383,10 @@ class EntertainmentService:
             target_rotation = (360.0 - target_point) % 360.0
             mode = str(r.get("mode") or "")
             manual_mode = str(r.get("manual_mode") or "")
-            # In winner mode, remove the winning option *after the spin* too:
-            # streamers can pick several different winners, then continue the
-            # elimination game from the remaining pool without re-preparing.
-            remove = (mode == "manual" and len(entries) > 1)
+            # Elimination removes the picked person after the wheel stops.
+            # Winner mode keeps the winning sector until the NEXT spin.
+            remove = (mode == "manual" and manual_mode == "elimination" and len(entries) > 1)
+            defer_winner_removal = (mode == "manual" and manual_mode == "winner")
             if mode == "manual" and manual_mode == "elimination" and len(entries)==2:
                 # Last round: report the surviving winner, not the eliminated one.
                 remaining = next(item["label"] for item in entries if item["key"] != chosen["key"])
@@ -382,7 +404,8 @@ class EntertainmentService:
             r["spin_ends_at"] = now + duration + 0.8
             r["pending_spin"] = {
                 "remove": remove,
-                "removed_label": chosen["label"] if remove else "",
+                "defer_winner_removal": defer_winner_removal,
+                "removed_label": chosen["label"] if (remove or defer_winner_removal) else "",
                 "display_label": display_label,
                 "display_status": display_status,
             }

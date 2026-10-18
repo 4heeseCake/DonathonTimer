@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QLayout,
     QLineEdit,
     QPlainTextEdit,
+    QProgressBar,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -170,6 +171,14 @@ QFrame#RecentDonation[rank="0"] {{ background:#0c2831; border:1px solid #22c7df;
 QLabel#RecentDonationMain {{ font-weight:700; color:{p['text']}; }} QLabel#RecentDonationSub {{ color:{p['muted']}; font-size:12px; }}
 QFrame#MetricCard {{ background:{p['button']}; border:1px solid {p['neutral_border']}; border-radius:12px; }} QLabel#MetricBig {{ font-size:22px; font-weight:850; color:{p['text']}; }} QLabel#MetricSmall {{ color:{p['muted']}; font-size:12px; }}
 QPushButton {{ background:{p['button']}; border:1px solid {p['input_border']}; border-radius:12px; padding:10px 15px; font-weight:700; min-height:18px; }} QPushButton:hover {{ background:{p['button_hover']}; }} QPushButton:pressed {{ background:{p['button_hover']}; padding-top:11px; padding-bottom:9px; }} QPushButton:disabled {{ color:#697386; background:rgba(80,90,105,40); border-color:rgba(100,110,130,45); }}
+QPushButton#OBSActionTimer {{ background:#116a76; color:#ffffff; border:2px solid #35dbee; font-size:14px; font-weight:800; min-height:30px; padding:8px 12px; }}
+QPushButton#OBSActionTimer:hover {{ background:#158697; }}
+QPushButton#OBSActionInteractive {{ background:#5b3cb7; color:#ffffff; border:2px solid #ba8cff; font-size:14px; font-weight:800; min-height:30px; padding:8px 12px; }}
+QPushButton#OBSActionInteractive:hover {{ background:#7950d9; }}
+QPushButton#SupportLink {{ background:transparent; color:{p['muted']}; font-size:12px; border:1px solid {p['sidebar_border']}; padding:6px; min-height:15px; }}
+QPushButton#SupportLink:hover {{ color:{p['text']}; border-color:#46cbeb; background:{p['button_hover']}; }}
+QProgressBar {{ background:{p['input']}; border:1px solid {p['input_border']}; border-radius:8px; text-align:center; min-height:18px; }}
+QProgressBar::chunk {{ background:#6557e8; border-radius:7px; }}
 QPushButton#Primary {{ background:#6557e8; border:1px solid #8e82ff; color:#ffffff; }} QPushButton#Primary:hover {{ background:#7568ef; }}
 QPushButton#OrangePrimary {{ background:#d9792b; border:1px solid #f4a768; color:#ffffff; }} QPushButton#OrangePrimary:hover {{ background:#e2873a; }}
 QPushButton#Danger {{ background:#2a2025; border:1px solid #743847; color:#ff9caa; }} QPushButton#Danger:hover {{ background:#35262d; }}
@@ -694,6 +703,7 @@ class WordCloudWidget(QWidget):
     def __init__(self,parent=None):
         super().__init__(parent)
         self.mode="gradient"; self.items=[]; self._hover_targets=[]
+        self.empty_message="Пока нет сообщений чата для выбранного периода"
         self.setMouseTracking(True); self.setMinimumHeight(300); self.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Preferred)
 
     def set_mode(self,mode: str) -> None:
@@ -701,6 +711,10 @@ class WordCloudWidget(QWidget):
 
     def set_words(self,counts: Counter) -> None:
         self.items=counts.most_common(48); self.update()
+
+    def set_empty_message(self, message: str) -> None:
+        self.empty_message=message
+        self.update()
 
     def mouseMoveEvent(self,event) -> None:
         pos=event.position()
@@ -719,7 +733,7 @@ class WordCloudWidget(QWidget):
         else: panel=QColor(9,18,31,188); border=QColor("#435675"); base=QColor("#f4f6fb")
         rect=QRectF(self.rect()).adjusted(8,8,-8,-8); painter.setBrush(panel); painter.setPen(QPen(border,1)); painter.drawRoundedRect(rect,14,14)
         if not self.items:
-            painter.setPen(base); painter.setFont(QFont("Segoe UI",11)); painter.drawText(rect,Qt.AlignCenter,"Слова появятся после того, как приложение получит сообщения чата")
+            painter.setPen(base); painter.setFont(QFont("Segoe UI",11)); painter.drawText(rect.adjusted(20,0,-20,0),Qt.AlignCenter|Qt.TextWordWrap,self.empty_message)
             return
         max_count=max(1,self.items[0][1]); palette=["#67e8f9","#c084fc","#fbbf24","#60a5fa","#fb7185","#34d399","#f472b6"]
         usable=rect.adjusted(18,18,-18,-18); rows=[]; current=[]; current_w=0.0; row_h=0.0
@@ -1320,6 +1334,11 @@ class MainWindow(QMainWindow):
             btn=QPushButton(text); btn.setObjectName("ModeButton"); btn.setCheckable(True); btn.setToolTip(tip); btn.setChecked(self.ui_theme==key)
             btn.clicked.connect(lambda checked=False,k=key:self._set_ui_theme(k)); self.mode_group.addButton(btn); self.mode_buttons[key]=btn; mode_row.addWidget(btn)
         side.addLayout(mode_row)
+        support_btn=QPushButton("Связь с техподдержкой ↗")
+        support_btn.setObjectName("SupportLink")
+        support_btn.setToolTip("Открыть Telegram для связи с разработчиком")
+        support_btn.clicked.connect(lambda: webbrowser.open("https://t.me/Cheese_Cake44"))
+        side.addWidget(support_btn)
         shell.addWidget(self.sidebar)
 
         # Right workspace
@@ -1361,8 +1380,9 @@ class MainWindow(QMainWindow):
         self.twitch_home_status = QLabel("● Twitch не подключён"); self.twitch_home_status.setObjectName("Warn")
         status.addWidget(self.timer_status); status.addWidget(self.obs_status); status.addWidget(self.da_status); status.addWidget(self.twitch_home_status)
         home_timer_row=QHBoxLayout(); home_timer_row.setSpacing(8)
-        self.home_timer_toggle=QPushButton("Показать таймер"); self.home_timer_toggle.setObjectName("Chip"); self.home_timer_toggle.setCheckable(True); self.home_timer_toggle.toggled.connect(self._overlay_timer_visibility_changed)
-        home_timer_row.addWidget(self.home_timer_toggle); home_timer_row.addStretch(); status.addLayout(home_timer_row); status.addStretch()
+        self.home_timer_toggle=QPushButton("Показать таймер"); self.home_timer_toggle.setObjectName("OBSActionTimer"); self.home_timer_toggle.setCheckable(True); self.home_timer_toggle.toggled.connect(self._overlay_timer_visibility_changed)
+        self.home_interactive_toggle=QPushButton("Показать рулетку"); self.home_interactive_toggle.setObjectName("OBSActionInteractive"); self.home_interactive_toggle.setCheckable(True); self.home_interactive_toggle.toggled.connect(self._entertainment_interactive_visibility_changed)
+        home_timer_row.addWidget(self.home_timer_toggle); home_timer_row.addWidget(self.home_interactive_toggle); home_timer_row.addStretch(); status.addLayout(home_timer_row); status.addStretch()
 
         # Expanded current-session card.
         self.home_session_card = self._card("blue"); session = QVBoxLayout(self.home_session_card); session.setContentsMargins(20,18,20,18); session.setSpacing(8)
@@ -1488,7 +1508,7 @@ class MainWindow(QMainWindow):
         ot=QLabel("OBS Browser Source"); ot.setObjectName("SectionTitle"); ol.addWidget(ot)
         visibility_row=QHBoxLayout(); visibility_row.setSpacing(10)
         self.overlay_timer_status=QLabel("Таймер в OBS скрыт"); self.overlay_timer_status.setObjectName("Muted"); visibility_row.addWidget(self.overlay_timer_status,1)
-        self.overlay_timer_toggle=QPushButton("Показать таймер"); self.overlay_timer_toggle.setObjectName("Primary"); self.overlay_timer_toggle.setCheckable(True); self.overlay_timer_toggle.toggled.connect(self._overlay_timer_visibility_changed); visibility_row.addWidget(self.overlay_timer_toggle)
+        self.overlay_timer_toggle=QPushButton("Показать таймер"); self.overlay_timer_toggle.setObjectName("OBSActionTimer"); self.overlay_timer_toggle.setCheckable(True); self.overlay_timer_toggle.toggled.connect(self._overlay_timer_visibility_changed); visibility_row.addWidget(self.overlay_timer_toggle)
         ol.addLayout(visibility_row)
         self.overlay_url_label=QLabel(OVERLAY_URL); self.overlay_url_label.setObjectName("Muted"); self.overlay_url_label.setTextInteractionFlags(Qt.TextSelectableByMouse); self.overlay_url_label.setWordWrap(True); ol.addWidget(self.overlay_url_label)
         row=QHBoxLayout(); copy=QPushButton("Копировать ссылку"); copy.clicked.connect(self._copy_overlay); open_btn=QPushButton("Открыть превью"); open_btn.clicked.connect(lambda:webbrowser.open(OVERLAY_URL)); obs_help=QPushButton("Как добавить в OBS?"); obs_help.clicked.connect(lambda:self._switch_page(self.PAGE_GUIDE)); row.addWidget(copy); row.addWidget(open_btn); row.addWidget(obs_help); row.addStretch(); ol.addLayout(row)
@@ -1608,7 +1628,7 @@ class MainWindow(QMainWindow):
         def add_timeline(parent_layout, widget: StreamAnalyticsTimeline):
             parent_layout.addWidget(widget)
             controls=QHBoxLayout(); controls.setSpacing(7)
-            hint=QLabel("Колёсико прокручивает страницу. Ctrl + колёсико или кнопки меняют масштаб; увеличенный график можно перетаскивать ЛКМ.")
+            hint=QLabel("Колёсико листает страницу. Ctrl + колёсико или кнопки +/− меняют масштаб. Увеличенный график можно двигать левой кнопкой мыши.")
             hint.setObjectName("Muted"); hint.setWordWrap(True); controls.addWidget(hint,1)
             minus=QPushButton("−"); minus.setToolTip("Отдалить"); minus.clicked.connect(widget.zoom_out)
             reset=QPushButton("100%"); reset.setToolTip("Показать весь выбранный период"); reset.clicked.connect(widget.reset_zoom)
@@ -1632,19 +1652,21 @@ class MainWindow(QMainWindow):
         cht=QLabel("Чат Twitch"); cht.setObjectName("SectionTitle"); chl.addWidget(cht); metric_strip(chl,"chat")
         self.analysis_chat_timeline=StreamAnalyticsTimeline(); self.analysis_chat_timeline.set_mode(self.ui_theme); add_timeline(chl,self.analysis_chat_timeline)
         cloud_title=QLabel("О чём чаще всего пишет чат"); cloud_title.setStyleSheet("font-size:16px;font-weight:750;margin-top:5px"); chl.addWidget(cloud_title)
-        cloud_hint=QLabel("Чем чаще встречается слово, тем крупнее оно показано. Служебные слова и числа не учитываются."); cloud_hint.setObjectName("Muted"); cloud_hint.setWordWrap(True); chl.addWidget(cloud_hint)
+        cloud_hint=QLabel("Часто повторяемые слова показаны крупнее. Например, «игра» будет больше, если зрители пишут её чаще."); cloud_hint.setObjectName("Muted"); cloud_hint.setWordWrap(True); chl.addWidget(cloud_hint)
         self.analysis_chat_cloud=WordCloudWidget(); self.analysis_chat_cloud.set_mode(self.ui_theme); chl.addWidget(self.analysis_chat_cloud); layout.addWidget(chat_card)
 
         speech_card=self._card("orange"); stl=QVBoxLayout(speech_card); stl.setContentsMargins(20,17,20,17); stl.setSpacing(9)
         sht=QLabel("Речь стримера"); sht.setObjectName("SectionTitle"); stl.addWidget(sht); metric_strip(stl,"speech")
         self.analysis_speech_timeline=StreamAnalyticsTimeline(); self.analysis_speech_timeline.set_mode(self.ui_theme); add_timeline(stl,self.analysis_speech_timeline)
         sc_title=QLabel("Частые слова стримера"); sc_title.setStyleSheet("font-size:16px;font-weight:750;margin-top:5px"); stl.addWidget(sc_title)
-        self.analysis_speech_cloud=WordCloudWidget(); self.analysis_speech_cloud.set_mode(self.ui_theme); stl.addWidget(self.analysis_speech_cloud); layout.addWidget(speech_card)
+        self.analysis_speech_cloud=WordCloudWidget(); self.analysis_speech_cloud.set_mode(self.ui_theme); self.analysis_speech_cloud.set_empty_message("Распознанных слов пока нет. Запиши голос во время сессии, затем запусти распознавание ниже."); stl.addWidget(self.analysis_speech_cloud); layout.addWidget(speech_card)
 
         speech=self._card("teal"); spl=QVBoxLayout(speech); spl.setContentsMargins(20,17,20,17); spl.setSpacing(9)
         setup_title=QLabel("Настройка анализа речи"); setup_title.setObjectName("SectionTitle"); spl.addWidget(setup_title)
-        desc=QLabel("Во время сессии приложение может сохранять звук микрофона. Расшифровку запускай после стрима — так анализ почти не влияет на игру и OBS."); desc.setObjectName("Muted"); desc.setWordWrap(True); spl.addWidget(desc)
-        self.speech_status_label=QLabel("—"); self.speech_status_label.setObjectName("Muted"); spl.addWidget(self.speech_status_label)
+        desc=QLabel("Twitch и трансляция OBS не нужны. Включи запись голоса ДО начала сессии, поговори в выбранный микрофон, заверши сессию и нажми «Распознать». Первый запуск может скачать модель речи из интернета."); desc.setObjectName("Muted"); desc.setWordWrap(True); spl.addWidget(desc)
+        self.speech_status_label=QLabel("—"); self.speech_status_label.setObjectName("Muted"); self.speech_status_label.setWordWrap(True); spl.addWidget(self.speech_status_label)
+        self.speech_progress_bar=QProgressBar(); self.speech_progress_bar.setRange(0,100); self.speech_progress_bar.setValue(0); self.speech_progress_bar.setFormat("0%"); self.speech_progress_bar.hide(); spl.addWidget(self.speech_progress_bar)
+        self.speech_recording_info=QLabel("Выбери сессию, чтобы проверить запись голоса."); self.speech_recording_info.setObjectName("Muted"); self.speech_recording_info.setWordWrap(True); spl.addWidget(self.speech_recording_info)
         speech_grid=QGridLayout(); speech_grid.setHorizontalSpacing(10); speech_grid.setVerticalSpacing(8)
         self.speech_enabled=QCheckBox("Сохранять голос для анализа во время активной сессии"); self.speech_enabled.setChecked(self.speech_service.enabled()); self.speech_enabled.toggled.connect(self._speech_enabled_changed)
         self.speech_delete_audio=QCheckBox("Удалять временную аудиозапись после успешной расшифровки"); self.speech_delete_audio.setChecked(self.speech_service.delete_audio_after_transcription()); self.speech_delete_audio.toggled.connect(self.speech_service.set_delete_audio_after_transcription)
@@ -1732,9 +1754,10 @@ class MainWindow(QMainWindow):
             [("Открыть Развлечения",lambda:self._switch_page(self.PAGE_ENTERTAINMENT),True)])
 
         add_step("teal","8 · Если нужен анализ речи стримера",
-            "1) Открой Анализ → Настройка анализа речи и нажми «Установить анализ речи», если компонент ещё не установлен.\n"
-            "2) Выбери микрофон и включи сохранение голоса во время активной сессии.\n"
-            "3) После стрима выбери сессию прямо рядом с кнопкой «Распознать речь выбранной сессии» внизу Анализа. Выбор автоматически обновит графики сверху.\n"
+            "1) Открой «Анализ» и установи компонент речи, если он ещё не установлен.\n"
+            "2) Выбери микрофон и включи «Сохранять голос» ДО запуска сессии. Можно проверить речь без Twitch и стрима OBS.\n"
+            "3) Заверши сессию, выбери её внизу Анализа и проверь строку «Запись найдена». Затем нажми «Распознать речь».\n"
+            "4) Дождись окончания. Ход распознавания показан ниже настроек. Если слова не нашлись, проверь микрофон — запись не удалится.\n"
             "Тяжёлая обработка запускается после стрима отдельно от основного окна. В установочной версии приложения отдельный файл запускать не потребуется.",
             [("Открыть Анализ",lambda:self._switch_page(self.PAGE_ANALYSIS),True)])
 
@@ -1747,7 +1770,8 @@ class MainWindow(QMainWindow):
             "• Донат пришёл, но время начислено неверно → История → «Отменить начисление…» и выбери конкретную запись.\n"
             "• OBS не меняется → открой превью оверлея. Если превью работает, обнови кэш Browser Source в OBS.\n"
             "• Twitch не собирает данные → проверь зелёный статус Twitch на Главной и переподключи аккаунт во вкладке «Аккаунты».\n"
-            "• Никогда не публикуй секретные ключи сервисов. Donathon Timer просит только те идентификаторы, которые нужны для подключения.",
+            "• Речь не распознаётся → проверь, что запись голоса была включена до начала сессии. Внизу «Анализа» показаны запись и причина ошибки.\n"
+            "• Если нужна помощь → нажми «Связь с техподдержкой» слева внизу. Никогда не отправляй пароль и секретные ключи.",
             [("Открыть Аккаунты",lambda:self._switch_page(self.PAGE_ACCOUNTS),False),("Открыть Историю",lambda:self._switch_page(self.PAGE_HISTORY),False)])
         layout.addStretch()
 
@@ -1819,17 +1843,22 @@ class MainWindow(QMainWindow):
         self.entertainment_roulette_live_card=self._card("orange"); rl=QGridLayout(self.entertainment_roulette_live_card); rl.setContentsMargins(22,18,22,18); rl.setHorizontalSpacing(18); rl.setVerticalSpacing(8)
         live_title=QLabel("Текущее колесо"); live_title.setObjectName("SectionTitle"); rl.addWidget(live_title,0,0,1,2)
         controls=QHBoxLayout(); controls.setSpacing(8)
-        self.entertainment_show_interactive=QPushButton("Показать интерактив"); self.entertainment_show_interactive.setObjectName("Primary"); self.entertainment_show_interactive.setCheckable(True); self.entertainment_show_interactive.toggled.connect(self._entertainment_interactive_visibility_changed); controls.addWidget(self.entertainment_show_interactive)
-        self.entertainment_show_timer=QPushButton("Показать таймер"); self.entertainment_show_timer.setObjectName("Chip"); self.entertainment_show_timer.setCheckable(True); self.entertainment_show_timer.toggled.connect(self._entertainment_timer_visibility_changed); controls.addWidget(self.entertainment_show_timer)
+        self.entertainment_show_interactive=QPushButton("Показать интерактив"); self.entertainment_show_interactive.setObjectName("OBSActionInteractive"); self.entertainment_show_interactive.setCheckable(True); self.entertainment_show_interactive.toggled.connect(self._entertainment_interactive_visibility_changed); controls.addWidget(self.entertainment_show_interactive)
+        self.entertainment_show_timer=QPushButton("Показать таймер"); self.entertainment_show_timer.setObjectName("OBSActionTimer"); self.entertainment_show_timer.setCheckable(True); self.entertainment_show_timer.toggled.connect(self._entertainment_timer_visibility_changed); controls.addWidget(self.entertainment_show_timer)
         controls.addWidget(QLabel("Прокрут:")); self.roulette_spin_speed=QComboBox(); self.roulette_spin_speed.addItem("Моментальная", "fast"); self.roulette_spin_speed.addItem("Плавная", "normal"); self.roulette_spin_speed.currentIndexChanged.connect(self._roulette_spin_speed_changed); self.roulette_spin_speed.setMaximumWidth(160); controls.addWidget(self.roulette_spin_speed)
         self.manual_roulette_mode_label=QLabel("Режим:"); controls.addWidget(self.manual_roulette_mode_label)
-        self.manual_roulette_mode=QComboBox(); self.manual_roulette_mode.addItem("Сразу победитель", "winner"); self.manual_roulette_mode.addItem("Выпавший выбывает", "elimination")
-        self.manual_roulette_mode.setToolTip("Применяется сразу; текущие участники сохраняются. Победители не участвуют в следующих прокрутах.")
+        self.manual_roulette_mode=QComboBox(); self.manual_roulette_mode.addItem("Выбрать победителя", "winner"); self.manual_roulette_mode.addItem("Выпавший выбывает", "elimination")
+        self.manual_roulette_mode.setToolTip("Режим меняется сразу. В режиме победителя выпавший останется на колесе до следующей прокрутки.")
         self.manual_roulette_mode.setMinimumWidth(150); self.manual_roulette_mode.currentIndexChanged.connect(self._manual_roulette_mode_changed)
         controls.addWidget(self.manual_roulette_mode); controls.addStretch(); controls.addWidget(self.entertainment_obs_status)
         rl.addLayout(controls,1,0,1,2)
         self.entertainment_wheel=WheelPreview(); self.entertainment_wheel.set_mode(self.ui_theme); self.entertainment_wheel.clicked.connect(self._spin_roulette); rl.addWidget(self.entertainment_wheel,2,0)
-        side=QVBoxLayout(); self.roulette_live_status=QLabel("Рулетка ещё не подготовлена"); self.roulette_live_status.setObjectName("Muted"); self.roulette_live_status.setWordWrap(True); side.addWidget(self.roulette_live_status)
+        side=QVBoxLayout()
+        self.last_winner_label=QLabel("Последний победитель: пока нет")
+        self.last_winner_label.setWordWrap(True)
+        self.last_winner_label.setStyleSheet("background:#173a32;color:#dbffdc;border:1px solid #36b995;border-radius:9px;padding:10px;font-weight:750;")
+        side.addWidget(self.last_winner_label)
+        self.roulette_live_status=QLabel("Рулетка ещё не подготовлена"); self.roulette_live_status.setObjectName("Muted"); self.roulette_live_status.setWordWrap(True); side.addWidget(self.roulette_live_status)
         self.roulette_live_table=QTableWidget(0,4); self.roulette_live_table.setHorizontalHeaderLabels(["Участник / вариант","Вес","Шанс","Дополнительно"]); self.roulette_live_table.verticalHeader().setVisible(False); self.roulette_live_table.setEditTriggers(QAbstractItemView.NoEditTriggers); self.roulette_live_table.setSelectionMode(QAbstractItemView.NoSelection); self.roulette_live_table.setAlternatingRowColors(True); self.roulette_live_table.setMinimumHeight(210)
         hh=self.roulette_live_table.horizontalHeader(); hh.setSectionResizeMode(0,QHeaderView.Stretch); hh.setSectionResizeMode(1,QHeaderView.ResizeToContents); hh.setSectionResizeMode(2,QHeaderView.ResizeToContents); hh.setSectionResizeMode(3,QHeaderView.ResizeToContents)
         side.addWidget(self.roulette_live_table,1); rl.addLayout(side,2,1); rl.setColumnStretch(0,1); rl.setColumnStretch(1,2); layout.addWidget(self.entertainment_roulette_live_card)
@@ -1838,8 +1867,8 @@ class MainWindow(QMainWindow):
         self.entertainment_poll_live_card=self._card("teal"); poll_l=QVBoxLayout(self.entertainment_poll_live_card); poll_l.setContentsMargins(22,18,22,18); poll_l.setSpacing(9)
         self.poll_live_title=QLabel("Результаты голосования"); self.poll_live_title.setObjectName("SectionTitle"); poll_l.addWidget(self.poll_live_title)
         poll_controls=QHBoxLayout(); poll_controls.setSpacing(8)
-        self.poll_show_interactive=QPushButton("Показать интерактив"); self.poll_show_interactive.setObjectName("Primary"); self.poll_show_interactive.setCheckable(True); self.poll_show_interactive.toggled.connect(self._entertainment_interactive_visibility_changed); poll_controls.addWidget(self.poll_show_interactive)
-        self.poll_show_timer=QPushButton("Показать таймер"); self.poll_show_timer.setObjectName("Chip"); self.poll_show_timer.setCheckable(True); self.poll_show_timer.toggled.connect(self._entertainment_timer_visibility_changed); poll_controls.addWidget(self.poll_show_timer); poll_controls.addStretch(); poll_l.addLayout(poll_controls)
+        self.poll_show_interactive=QPushButton("Показать интерактив"); self.poll_show_interactive.setObjectName("OBSActionInteractive"); self.poll_show_interactive.setCheckable(True); self.poll_show_interactive.toggled.connect(self._entertainment_interactive_visibility_changed); poll_controls.addWidget(self.poll_show_interactive)
+        self.poll_show_timer=QPushButton("Показать таймер"); self.poll_show_timer.setObjectName("OBSActionTimer"); self.poll_show_timer.setCheckable(True); self.poll_show_timer.toggled.connect(self._entertainment_timer_visibility_changed); poll_controls.addWidget(self.poll_show_timer); poll_controls.addStretch(); poll_l.addLayout(poll_controls)
         self.poll_live_status=QLabel("Голосование ещё не запущено"); self.poll_live_status.setObjectName("Muted"); poll_l.addWidget(self.poll_live_status)
         self.poll_live_table=QTableWidget(0,4); self.poll_live_table.setHorizontalHeaderLabels(["Вариант","Голосов","Доля","Как голосовать"]); self.poll_live_table.verticalHeader().setVisible(False); self.poll_live_table.setEditTriggers(QAbstractItemView.NoEditTriggers); self.poll_live_table.setSelectionMode(QAbstractItemView.NoSelection); self.poll_live_table.setAlternatingRowColors(True); self.poll_live_table.setMinimumHeight(210)
         phh=self.poll_live_table.horizontalHeader(); phh.setSectionResizeMode(0,QHeaderView.Stretch)
@@ -1869,11 +1898,17 @@ class MainWindow(QMainWindow):
     def _entertainment_interactive_visibility_changed(self, checked: bool) -> None:
         self.entertainment_service.set_interactive_visible(bool(checked))
         snap=self.entertainment_service.snapshot(max_entries=1)
-        noun="голосование" if str(snap.get("active_mode") or "manual")=="poll" else "рулетку"
-        for name in ("entertainment_show_interactive", "poll_show_interactive"):
+        self._sync_interactive_visibility_buttons(bool(checked), str(snap.get("active_mode") or "manual"))
+
+    def _sync_interactive_visibility_buttons(self, visible: bool, active_mode: str) -> None:
+        noun="голосование" if active_mode=="poll" else "рулетку"
+        for name in ("entertainment_show_interactive", "poll_show_interactive", "home_interactive_toggle"):
             btn=getattr(self,name,None)
             if btn is not None:
-                btn.blockSignals(True); btn.setChecked(bool(checked)); btn.setText(("Скрыть " if checked else "Показать ")+noun); btn.blockSignals(False)
+                btn.blockSignals(True)
+                btn.setChecked(bool(visible))
+                btn.setText(("Скрыть " if visible else "Показать ")+noun)
+                btn.blockSignals(False)
 
     def _roulette_spin_speed_changed(self, *args) -> None:
         if not hasattr(self, "roulette_spin_speed"):
@@ -1902,12 +1937,8 @@ class MainWindow(QMainWindow):
         if hasattr(self,"entertainment_stack"):
             self.entertainment_stack.setCurrentIndex(index)
             self.entertainment_stack.setFixedHeight((390,255,230,400)[index])
-        interactive_text = "голосование" if index==3 else "рулетку"
-        for name in ("entertainment_show_interactive", "poll_show_interactive"):
-            btn=getattr(self,name,None)
-            if btn is not None:
-                checked=btn.isChecked()
-                btn.setText(("Скрыть " if checked else "Показать ")+interactive_text)
+        active_state=self.entertainment_service.snapshot(max_entries=1)
+        self._sync_interactive_visibility_buttons(bool(active_state.get("interactive_visible",False)),mode)
         if hasattr(self,"entertainment_mode_buttons"):
             for i,b in enumerate(self.entertainment_mode_buttons):
                 b.blockSignals(True); b.setChecked(i==index); b.blockSignals(False)
@@ -1976,10 +2007,7 @@ class MainWindow(QMainWindow):
         self._sync_timer_visibility_buttons(show_timer)
         active_mode=str(snap.get("active_mode") or r.get("mode") or "manual")
         interactive_noun="голосование" if active_mode=="poll" else "рулетку"
-        for name in ("entertainment_show_interactive", "poll_show_interactive"):
-            btn=getattr(self,name,None)
-            if btn is not None:
-                btn.blockSignals(True); btn.setChecked(interactive_visible); btn.setText(("Скрыть " if interactive_visible else "Показать ")+interactive_noun); btn.blockSignals(False)
+        self._sync_interactive_visibility_buttons(interactive_visible, active_mode)
         spin_speed = str(r.get("spin_speed") or "normal")
         if hasattr(self,"manual_roulette_mode"):
             current_mode=str(r.get("manual_mode") or "winner")
@@ -1997,6 +2025,7 @@ class MainWindow(QMainWindow):
         names={None:"Интерактив в OBS скрыт","roulette":"В OBS: рулетка"+suffix,"poll":"В OBS: голосование"+suffix}
         self.entertainment_obs_status.setText(names.get(display,"OBS-интерактив активен"))
         self.entertainment_wheel.set_snapshot(r)
+        self.last_winner_label.setText("Последний победитель: " + (str(r.get("last_winner")) if r.get("last_winner") else "пока нет"))
         if (not r.get("spinning") and r.get("mode")=="manual" and
                 r.get("result") and int(r.get("spin_nonce") or 0)>0):
             nonce=int(r.get("spin_nonce") or 0)
@@ -2146,6 +2175,9 @@ class MainWindow(QMainWindow):
         self._refresh_status_only()
         if index==self.PAGE_HOME:
             self._refresh_session()
+            ent_state=self.entertainment_service.snapshot(max_entries=1)
+            self._sync_timer_visibility_buttons(bool(ent_state.get("timer_visible",False)))
+            self._sync_interactive_visibility_buttons(bool(ent_state.get("interactive_visible",False)), str(ent_state.get("active_mode") or "manual"))
         elif index==self.PAGE_OVERLAY:
             ent_state=self.entertainment_service.snapshot(max_entries=1)
             self._sync_timer_visibility_buttons(bool(ent_state.get("timer_visible",False)))
@@ -2341,6 +2373,7 @@ class MainWindow(QMainWindow):
         self.home_overlay_theme.setText(THEME_NAMES.get(p.overlay_theme,"Классический"))
         ent_state=self.entertainment_service.snapshot(max_entries=1)
         self._sync_timer_visibility_buttons(bool(ent_state.get("timer_visible",False)))
+        self._sync_interactive_visibility_buttons(bool(ent_state.get("interactive_visible",False)), str(ent_state.get("active_mode") or "manual"))
         self._history_signature=None; self._sessions_signature=None; self._donations_signature=None; self._analysis_signature=None; self._analysis_context_key=None
         self._refresh_status_only(); self._refresh_session()
         page=self.stack.currentIndex()
@@ -2792,6 +2825,7 @@ class MainWindow(QMainWindow):
                     combo.blockSignals(False)
         self._analysis_signature=None
         self._analysis_context_key=None
+        self._speech_recording_info_key=None
         if self.analysis_scope_combo.currentIndex()!=1:
             # Emits _analysis_scope_changed(), which updates all four graphs.
             self.analysis_scope_combo.setCurrentIndex(1)
@@ -2893,7 +2927,7 @@ class MainWindow(QMainWindow):
         self.analysis_chat_cloud.set_mode(self.ui_theme); self.analysis_chat_cloud.set_words(chat_counts)
         self.analysis_speech_cloud.set_mode(self.ui_theme); self.analysis_speech_cloud.set_words(speech_counts)
         self._update_speech_install_ui()
-        self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_session_combo.currentData() is not None)
+        self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_session_combo.currentData() is not None and self.speech_service.status().code not in {"transcribing", "progress"})
 
     def _release_analysis_memory(self) -> None:
         for name in ("analysis_donation_timeline","analysis_viewer_timeline","analysis_chat_timeline","analysis_speech_timeline"):
@@ -2907,13 +2941,32 @@ class MainWindow(QMainWindow):
 
     def _update_speech_install_ui(self) -> None:
         if not hasattr(self,"speech_status_label"): return
-        status=self.speech_service.status(); self.speech_status_label.setText(status.text)
+        status=self.speech_service.status()
+        active=status.code in {"transcribing", "progress"}
+        elapsed=f" · прошло {int(time.time()-self._speech_started_at)} сек." if active and getattr(self,"_speech_started_at",None) else ""
+        self.speech_status_label.setText(status.text+elapsed)
+        self.speech_progress_bar.setVisible(active or (status.code in {"done", "error"} and status.progress is not None))
+        if status.progress is not None:
+            self.speech_progress_bar.setRange(0,100)
+            self.speech_progress_bar.setValue(max(0,min(100,int(status.progress))))
+            self.speech_progress_bar.setFormat("%p%")
+        elif active:
+            self.speech_progress_bar.setRange(0,0)
+        else:
+            self.speech_progress_bar.setRange(0,100)
+            self.speech_progress_bar.setValue(0)
+        # Avoid re-opening audio files on every lightweight UI update.
+        sid=self.speech_session_combo.currentData() if hasattr(self,"speech_session_combo") else None
+        key=(self.state.profile.id,sid,status.code)
+        if getattr(self,"_speech_recording_info_key",None)!=key:
+            self._speech_recording_info_key=key
+            self.speech_recording_info.setText(self.speech_service.recording_summary(self.state.profile.id,sid))
         if hasattr(self,"install_speech_btn"):
             installed=self.speech_service.has_transcriber(); installing=self.speech_service.installing()
             self.install_speech_btn.setEnabled(not installed and not installing)
             self.install_speech_btn.setText("Анализ речи установлен" if installed else ("Установка…" if installing else "Установить анализ речи"))
         if hasattr(self,"transcribe_btn"):
-            self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_session_combo.currentData() is not None)
+            self.transcribe_btn.setEnabled(self.speech_service.has_transcriber() and self.analysis_session_combo.currentData() is not None and status.code not in {"transcribing", "progress"})
 
     def _install_speech_ai(self) -> None:
         if self.speech_service.has_transcriber():
@@ -2955,7 +3008,10 @@ class MainWindow(QMainWindow):
             self._analysis_session_changed(self.speech_session_combo)
         try:
             self.speech_service.transcribe_session(self.state.profile.id,int(session_id))
-            self.statusBar().showMessage("Распознавание запущено в фоне после стрима",4000)
+            self._speech_started_at=time.time()
+            self._speech_recording_info_key=None
+            self._update_speech_install_ui()
+            self.statusBar().showMessage("Распознавание запущено. Ход работы виден внизу раздела «Анализ».",6000)
         except RuntimeError as exc:
             QMessageBox.information(self,"Речь стримера",str(exc))
 

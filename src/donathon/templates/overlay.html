@@ -229,7 +229,7 @@ function renderEntertainment(){
         ? `<div class="roulette-result-box"><div class="roulette-status">${esc(r.result_status||'')}</div><div class="roulette-result">${esc(r.result)}</div></div>`
         : `<div class="roulette-status">${esc(r.result_status|| (r.collecting?'ИДЁТ СБОР':'ГОТОВО К ПРОКРУТКЕ'))}</div><div class="roulette-result">${esc(r.mode==='chat'?`${totalCount} участников`:r.mode==='donation'?`${totalCount} вариантов`:'Выбери победителя')}</div>`;
     host.className=`visible theme-${theme}`;
-    host.innerHTML=`<div class="interactive-card"><div class="interactive-title">${esc(r.title||'Рулетка')}</div><div class="roulette-layout"><div class="wheel-box"><div class="wheel-pointer"></div><div id="wheel-rotor"><div id="wheel" style="background:${gradient}"></div><div class="wheel-labels">${labels}</div></div><div class="wheel-center">GO</div></div><div class="roulette-side">${resultText}<div class="roulette-list">${list}</div>${more}</div></div></div>`;
+    host.innerHTML=`<div class="interactive-card"><div class="interactive-title">${esc(r.title||'Рулетка')}</div><div class="roulette-layout"><div class="wheel-box"><div class="wheel-pointer"></div><div id="wheel-rotor"><div id="wheel" style="background:${gradient}"></div><div class="wheel-labels">${labels}</div></div><div class="wheel-center">GO</div></div><div class="roulette-side">${r.last_winner?`<div class="roulette-result-box"><div class="roulette-status">ПОСЛЕДНИЙ ПОБЕДИТЕЛЬ</div><div class="roulette-result">${esc(r.last_winner)}</div></div>`:''}${resultText}<div class="roulette-list">${list}</div>${more}</div></div></div>`;
     const rotor=document.getElementById('wheel-rotor');
     const nonce=Number(r.spin_nonce)||0;
     if(rotor){
