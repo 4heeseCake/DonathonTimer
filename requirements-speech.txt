@@ -1,1 +1,6 @@
+# Faster-Whisper 1.2.1 passes metadata_errors to av.open().
+# PyAV 19 removed this argument, causing all WAV transcriptions to fail.
+# Use the tested PyAV 17.1.0 Windows binary until a compatible
+# faster-whisper release is packaged. Do NOT remove this pin casually.
 faster-whisper>=1.1,<2
+av==17.1.0

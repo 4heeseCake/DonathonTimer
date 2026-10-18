@@ -109,5 +109,10 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
-        emit("error", f"Ошибка распознавания: {exc}")
+        description = str(exc)
+        if "metadata_errors" in description and "unexpected keyword" in description:
+            emit("error", "Несовместимая версия компонента распознавания речи. "
+                "Обнови Donathon Timer и установи новый компонент анализа речи.")
+        else:
+            emit("error", f"Ошибка распознавания: {description}")
         raise SystemExit(1)

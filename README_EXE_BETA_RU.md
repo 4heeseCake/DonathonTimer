@@ -1,11 +1,11 @@
-# Donathon Timer 0.9.4 Beta 4 — как получить установочный EXE
+# Donathon Timer 0.9.4 Beta 5 — как получить установочный EXE
 
 Это **проект для сборки в Windows** на основе стабильного 0.9.3.2. Сборка производится на настоящей Windows 10/11 x64 (либо в GitHub Actions на Windows runner). Запускать `run.bat` пользователям готового релиза **не нужно**.
 
 ## Что получат стримеры
 
-- `DonathonTimer-0.9.4-beta4-Setup.exe` — обычный установщик для Windows с ярлыком и деинсталлятором, без запроса прав администратора.
-- `DonathonTimer-0.9.4-beta4-Portable.zip` — portable-вариант (распаковать целиком и запустить EXE).
+- `DonathonTimer-0.9.4-beta5-Setup.exe` — обычный установщик для Windows с ярлыком и деинсталлятором, без запроса прав администратора.
+- `DonathonTimer-0.9.4-beta5-Portable.zip` — portable-вариант (распаковать целиком и запустить EXE).
 - Анализ речи — опциональная кнопка установки непосредственно внутри «Анализа». Дополнительный компонент подгружается только после согласия пользователя, отдельно от основного установщика.
 - При первом распознавании речи отдельно загружается модель; собственно распознавание выполняется **после стрима**, на CPU максимум в два потока.
 
@@ -14,7 +14,7 @@
 1. Создай **публичный** репозиторий GitHub, например `username/donathon-timer`. GitHub не добавляет пользователей автоматически и не публикует ничего без твоего действия.
 2. Загрузи **содержимое этой папки** в корень репозитория, включая `.github/workflows/windows-beta-release.yml` и `installer`.
 3. Открой репозиторий → Settings → Actions → General → Workflow permissions. Включи разрешение Actions создавать релизы (Read and write permissions), если оно ещё не разрешено.
-4. Открой вкладку Actions → **Build and publish Windows beta** → Run workflow → оставь `v0.9.4-beta4` → запусти.
+4. Открой вкладку Actions → **Build and publish Windows beta** → Run workflow → оставь `v0.9.4-beta5` → запусти.
 5. Дождись успешного завершения. В разделе **Releases** автоматически появятся установщик, portable-архив, модуль речи и контрольные суммы.
 6. Отправляй тестерам ссылку на релиз `https://github.com/username/donathon-timer/releases`. Для будущего сайта можно сделать кнопку «Скачать для Windows», ведущую на тот же релиз.
 
@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\buildtools\build-windows.ps1
 Для полноценной сборки с ленивой установкой речи:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\buildtools\build-windows.ps1 -Repo 'YOURNAME/REPO' -Tag 'v0.9.4-beta4'
+powershell -ExecutionPolicy Bypass -File .\buildtools\build-windows.ps1 -Repo 'YOURNAME/REPO' -Tag 'v0.9.4-beta5'
 ```
 
 После этого **все три файла** (`Setup.exe`, portable ZIP, `DonathonSpeech-...zip`) нужно опубликовать в *одном* GitHub Release с этим тегом. Манифест внутри EXE содержит контрольную сумму ZIP, поэтому заменять архив речи без повторной сборки основного приложения нельзя.

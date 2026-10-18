@@ -1,10 +1,10 @@
 # Builds two standalone Windows programs, one beta setup, a portable archive,
 # and a separately downloadable optional speech component.
-# Example: powershell -ExecutionPolicy Bypass -File buildtools\build-windows.ps1 -Repo user/DonathonTimer -Tag v0.9.4-beta4
+# Example: powershell -ExecutionPolicy Bypass -File buildtools\build-windows.ps1 -Repo user/DonathonTimer -Tag v0.9.4-beta5
 [CmdletBinding()]
 param(
     [string]$Repo = "",
-    [string]$Tag = "v0.9.4-beta4",
+    [string]$Tag = "v0.9.4-beta5",
     [string]$Python = "py -3.12"
 )
 $ErrorActionPreference = 'Stop'
@@ -24,6 +24,11 @@ try {
     & $pyExe -m pip install --disable-pip-version-check -r requirements.txt -r requirements-speech.txt 'pyinstaller>=6.12,<7' 'Pillow>=11,<13'
     if ($LASTEXITCODE -ne 0) { throw 'Ошибка установки библиотек сборки' }
 
+    # Smoke-test the audio decoder with the installed, frozen-build dependencies.
+    # Catches mismatches such as faster-whisper 1.2.1 + PyAV 19 BEFORE publishing EXE files.
+    & $pyExe buildtools\verify_speech_stack.py
+    if ($LASTEXITCODE -ne 0) { throw 'Несовместимы библиотеки распознавания речи. Сборка остановлена.' }
+
     # High-resolution Windows shortcut/setup icon from the approved logo.
     & $pyExe buildtools\make_icon.py
     if ($LASTEXITCODE -ne 0) { throw 'Ошибка создания иконки' }
@@ -33,7 +38,7 @@ try {
     $releaseDir = Join-Path $root 'release'
     New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
     Get-ChildItem $releaseDir -File | Where-Object { $_.Extension -in '.exe', '.zip' -or $_.Name -eq 'SHA256SUMS.txt' } | Remove-Item -Force
-    $version = '0.9.4-beta4'
+    $version = '0.9.4-beta5'
 
     # Optional self-contained speech worker; users only fetch it by opting in.
     & $pyExe -m PyInstaller --clean --noconfirm --onedir --console --name DonathonSpeechWorker `
